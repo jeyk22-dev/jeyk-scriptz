@@ -1,39 +1,635 @@
--- JEYK SCRIPT v1.0.2 (Rebuilt) - FULL UI + Working Buttons
--- Paste into your jeykscript.lua (replace existing). Load with your loader.
+-- JEYK SCRIPT v1.1 — FULL 99 NIGHTS IN THE FOREST BUILD
+-- Paste entire file to your repo (jeykscrpt/jeyk-scriptz -> jeykscript.lua)
+-- Then run loader:
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/jeykscrpt/jeyk-scriptz/main/jeykscript.lua"))()
+
+-- NOTES:
+--  • This tries to use real item names (medkit, bandage, carrot, log, scrap, kid) commonly used in the game.
+--  • If something doesn't show up or a button does nothing, reply with the EXACT name (copy from Explorer) and I will patch the selector.
 
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-
 local LocalPlayer = Players.LocalPlayer
 
--- Parent (change to PlayerGui if CoreGui blocked by your executor)
+-- Parent (executor compatibility)
 local PARENT = (pcall(function() return game.CoreGui end) and game.CoreGui) or LocalPlayer:WaitForChild("PlayerGui")
 
--- Cleanup old UI
-local UI_NAME = "JEYK_SCRIPT_UI_v1_2"
+-- Cleanup previous UI
+local UI_NAME = "JEYK_SCRIPT_UI_v1_1_FINAL"
 if PARENT:FindFirstChild(UI_NAME) then
     pcall(function() PARENT[UI_NAME]:Destroy() end)
 end
 
--- State
-local st = {
-    visible = true,
-    afk = false,
-    autoFillHunger = false,
-    infiniteHealth = false,
-    bringMedkitsRunning = false,
-    collectItems = false,
+-- ====== Config (edit names here if needed) ======
+local MEDKIT_NAMES = {"medkit","med kit","bandage","bandages","firstaid","first-aid"} -- healing items/tools
+local FOOD_NAMES = {"carrot","corn","berry","apple","morsel","steak","ribs","cake","chili","stew","hearty","food"}
+local FUEL_NAMES = {"log","wood","chair","biofuel","coal","canister","oil","fuel"}
+local SCRAP_NAMES = {"scrap","scraps","metal","part"}
+local KID_NAMES = {"kid","child","baby","npc_kid","survivor"} -- common kid/npc names
+local PLAYER_NAME_TAG = true -- show player ESP
+
+-- ESP color map
+local COLORS = {
+    med = Color3.fromRGB(60,200,80),
+    food = Color3.fromRGB(230,200,60),
+    fuel = Color3.fromRGB(120,170,255),
+    scrap = Color3.fromRGB(160,120,200),
+    kid = Color3.fromRGB(255,150,60),
+    player = Color3.fromRGB(250,90,90),
+    other = Color3.fromRGB(200,200,200)
 }
 
--- Helpers
+-- ====== State ======
+local st = {
+    visible = true,
+    esp = false,
+    espDistance = true,
+    afk = false,
+    autoFillHunger = false,
+    bringMedkitsRunning = false,
+    collectItems = false,
+    infiniteStamina = false,
+    infiniteHealth = false
+}
+
+-- ====== Helpers ======
 local function hrpOf(ch)
     if not ch then return nil end
     return ch:FindFirstChild("HumanoidRootPart") or ch:FindFirstChild("Torso") or ch:FindFirstChild("UpperTorso")
 end
+local function getHumanoid(ch)
+    if not ch then return nil end
+    return ch:FindFirstChildOfClass("Humanoid")
+end
+local function strContainsAny(name, list)
+    name = tostring(name):lower()
+    for _,pat in ipairs(list) do
+        if name:find(pat) then return true end
+    end
+    return false
+end
+
+-- safe tween teleport (to reduce anti-cheat)
+local function safeTweenPartTo(part, targetCFrame, steps)
+    if not part or not part:IsA("BasePart") or not targetCFrame then return end
+    steps = math.max(1, steps or 8)
+    local start = part.CFrame
+    for i = 1, steps do
+        local a = i / steps
+        local ok, _ = pcall(function() part.CFrame = start:lerp(targetCFrame, a) end)
+        if not ok then break end
+        wait(0.03)
+    end
+    pcall(function() part.CFrame = targetCFrame end)
+end
+local function teleportPlayerTo(cf)
+    local char = LocalPlayer.Character
+    local p = hrpOf(char)
+    if not p or not cf then return end
+    pcall(function() safeTweenPartTo(p, cf + Vector3.new(0,2,0), 8) end)
+end
+
+-- UI constructor
+local function new(class, props)
+    local obj = Instance.new(class)
+    if props then
+        for k,v in pairs(props) do
+            if k == "Parent" then obj.Parent = v else
+                pcall(function() obj[k] = v end)
+            end
+        end
+    end
+    return obj
+end
+
+-- ====== Build UI (H4x-style light gray; draggable; collapsible on title click) ======
+local gui = new("ScreenGui", {Name = UI_NAME, Parent = PARENT, ResetOnSpawn = false})
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local WIN_W, WIN_H = 320, 420
+local defaultPos = UDim2.new(0.05, 0, 0.12, 0)
+
+local win = new("Frame", {
+    Parent = gui,
+    Size = UDim2.new(0, WIN_W, 0, WIN_H),
+    Position = defaultPos,
+    BackgroundColor3 = Color3.fromRGB(245,245,247),
+    BorderSizePixel = 0
+})
+new("UICorner",{Parent = win, CornerRadius = UDim.new(0,10)})
+new("UIStroke",{Parent = win, Color = Color3.fromRGB(210,210,214), Thickness = 2, Transparency = 0.06})
+
+-- Title bar (click to toggle)
+local titleBar = new("Frame",{Parent = win, Size = UDim2.new(1,0,0,42), BackgroundTransparency = 1})
+local titleLabel = new("TextLabel", {
+    Parent = titleBar,
+    Size = UDim2.new(1, -80, 1, 0),
+    Position = UDim2.new(0, 12, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "JEYK SCRIPT - 99 NIGHTS",
+    Font = Enum.Font.GothamBold,
+    TextSize = 18,
+    TextColor3 = Color3.fromRGB(28,28,30),
+    TextXAlignment = Enum.TextXAlignment.Left
+})
+local keyHint = new("TextLabel", {
+    Parent = titleBar,
+    Size = UDim2.new(0,80,1,0),
+    Position = UDim2.new(1,-88,0,0),
+    BackgroundTransparency = 1,
+    Text = "RightShift",
+    Font = Enum.Font.Gotham,
+    TextSize = 12,
+    TextColor3 = Color3.fromRGB(110,110,120),
+    TextXAlignment = Enum.TextXAlignment.Right
+})
+local collapseBtn = new("TextButton", {
+    Parent = titleBar,
+    Size = UDim2.new(0,34,0,30),
+    Position = UDim2.new(1,-44,0,6),
+    BackgroundColor3 = Color3.fromRGB(225,225,228),
+    Text = "-",
+    Font = Enum.Font.GothamBold,
+    TextSize = 16,
+    TextColor3 = Color3.fromRGB(40,40,45)
+})
+new("UICorner",{Parent = collapseBtn, CornerRadius = UDim.new(0,6)})
+
+local content = new("Frame",{Parent = win, Size = UDim2.new(1,0,1,-42), Position = UDim2.new(0,0,0,42), BackgroundTransparency = 1})
+local sidebar = new("Frame",{Parent = content, Size = UDim2.new(0,96,1,0), BackgroundColor3 = Color3.fromRGB(238,238,241)})
+new("UICorner",{Parent = sidebar, CornerRadius = UDim.new(0,8)})
+new("UIListLayout",{Parent = sidebar, Padding = UDim.new(0,8), SortOrder = Enum.SortOrder.LayoutOrder})
+new("UIPadding",{Parent = sidebar, PaddingTop = UDim.new(0,8), PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8)})
+
+local pagesHolder = new("Frame",{Parent = content, Size = UDim2.new(1,-96,1,0), Position = UDim2.new(0,96,0,0), BackgroundTransparency = 1})
+
+local function makeScroll(parent)
+    local s = new("ScrollingFrame",{Parent=parent, Size=UDim2.new(1,-14,1,-14), Position=UDim2.new(0,7,0,7), BackgroundTransparency=1, ScrollBarThickness=6})
+    local layout = new("UIListLayout",{Parent=s, SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,8)})
+    new("UIPadding",{Parent=s, PaddingLeft=UDim.new(0,6), PaddingTop=UDim.new(0,6), PaddingBottom=UDim.new(0,6), PaddingRight=UDim.new(0,6)})
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        s.CanvasSize = UDim2.new(0,0,0, layout.AbsoluteContentSize.Y + 12)
+    end)
+    return s, layout
+end
+
+-- control builders
+local function section(parent, text)
+    local f = new("Frame",{Parent=parent, Size=UDim2.new(1,0,0,22), BackgroundTransparency=1})
+    new("TextLabel",{Parent=f, Size=UDim2.new(1,0,0,22), BackgroundTransparency=1, Text=text, Font=Enum.Font.GothamBold, TextSize=14, TextColor3=Color3.fromRGB(58,58,64), TextXAlignment=Enum.TextXAlignment.Left})
+    return f
+end
+local function btn(parent, text, cb)
+    local b = new("TextButton",{Parent=parent, Size=UDim2.new(1,0,0,36), BackgroundColor3=Color3.fromRGB(250,250,252), Text=text, Font=Enum.Font.Gotham, TextSize=14, TextColor3=Color3.fromRGB(30,30,34)})
+    new("UICorner",{Parent=b, CornerRadius=UDim.new(0,8)})
+    b.MouseButton1Click:Connect(function() pcall(cb) end)
+    return b
+end
+local function toggle(parent, label, init, cb)
+    local f = new("Frame",{Parent=parent, Size=UDim2.new(1,0,0,44), BackgroundTransparency=1})
+    new("TextLabel",{Parent=f, Size=UDim2.new(0.66,0,1,0), BackgroundTransparency=1, Text=label, Font=Enum.Font.Gotham, TextSize=13, TextColor3=Color3.fromRGB(46,46,52), TextXAlignment=Enum.TextXAlignment.Left})
+    local tbtn = new("TextButton",{Parent=f, Size=UDim2.new(0,60,0,28), Position=UDim2.new(1,-70,0,8), BackgroundColor3=init and Color3.fromRGB(90,200,110) or Color3.fromRGB(225,225,228), Text=init and "ON" or "OFF", Font=Enum.Font.GothamBold, TextSize=12})
+    new("UICorner",{Parent=tbtn, CornerRadius=UDim.new(0,8)})
+    tbtn.MouseButton1Click:Connect(function()
+        init = not init
+        tbtn.Text = init and "ON" or "OFF"
+        tbtn.BackgroundColor3 = init and Color3.fromRGB(90,200,110) or Color3.fromRGB(225,225,228)
+        pcall(cb, init)
+    end)
+    return f, tbtn
+end
+
+-- pages
+local pageNames = {"Main","Auto","ESP"}
+local pages = {}
+local sideButtons = {}
+for i,name in ipairs(pageNames) do
+    local b = new("TextButton",{Parent=sidebar, Size=UDim2.new(1,-12,0,40), BackgroundColor3=Color3.fromRGB(250,250,253), Text=name, Font=Enum.Font.Gotham, TextSize=14, TextColor3=Color3.fromRGB(60,60,70)})
+    new("UICorner",{Parent=b, CornerRadius=UDim.new(0,8)})
+    local pg = new("Frame",{Parent=pagesHolder, Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, Visible=false})
+    pages[name] = pg
+    local s, l = makeScroll(pg)
+    pages[name].Scroll = s
+    sideButtons[name] = b
+    b.MouseButton1Click:Connect(function()
+        for _,p in pairs(pages) do p.Visible = false end
+        pg.Visible = true
+    end)
+end
+pages["Main"].Visible = true
+
+-- ====== Populate Main page ======
+do
+    local s = pages["Main"].Scroll
+    section(s, "Quick")
+    btn(s, "Bring All Medkits (bring to you)", function()
+        if st.bringMedkitsRunning then return end
+        st.bringMedkitsRunning = true
+        spawn(function()
+            local char = LocalPlayer.Character
+            local hrp = hrpOf(char)
+            if not hrp then st.bringMedkitsRunning = false return end
+            local found = {}
+            for _,v in ipairs(Workspace:GetDescendants()) do
+                local nm = tostring(v.Name):lower()
+                if strContainsAny(nm, MEDKIT_NAMES) then
+                    table.insert(found, v)
+                end
+            end
+            if #found == 0 then
+                warn("[JEYK] No medkits found in workspace by name.")
+            else
+                for _,obj in ipairs(found) do
+                    -- try to move the part/tool to player
+                    local targetPart
+                    if obj:IsA("BasePart") then targetPart = obj
+                    elseif obj:IsA("Tool") then targetPart = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart")
+                    elseif obj:IsA("Model") then targetPart = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart")
+                    end
+                    if targetPart and targetPart:IsA("BasePart") then
+                        pcall(function()
+                            targetPart.CFrame = hrp.CFrame + Vector3.new(0,1.2,0)
+                        end)
+                        wait(0.22)
+                    end
+                end
+            end
+            st.bringMedkitsRunning = false
+        end)
+    end)
+
+    btn(s, "Heal Player (instant)", function()
+        local char = LocalPlayer.Character
+        local hum = getHumanoid(char)
+        if hum then pcall(function() hum.Health = hum.MaxHealth end) end
+    end)
+
+    btn(s, "Bring Nearby Items (generic)", function()
+        spawn(function()
+            local char = LocalPlayer.Character
+            local hrp = hrpOf(char)
+            if not hrp then return end
+            for _,v in ipairs(Workspace:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    local nm = tostring(v.Name):lower()
+                    if strContainsAny(nm, FOOD_NAMES) or strContainsAny(nm, SCRAP_NAMES) or strContainsAny(nm, FUEL_NAMES) then
+                        pcall(function() v.CFrame = hrp.CFrame + Vector3.new(0,1.2,0) end)
+                        wait(0.12)
+                    end
+                elseif v:IsA("Tool") or v:IsA("Model") then
+                    local nm = tostring(v.Name):lower()
+                    if strContainsAny(nm, FOOD_NAMES) or strContainsAny(nm, SCRAP_NAMES) or strContainsAny(nm, FUEL_NAMES) then
+                        local part = v:FindFirstChild("Handle") or v:FindFirstChildWhichIsA("BasePart")
+                        if part then pcall(function() part.CFrame = hrp.CFrame + Vector3.new(0,1.2,0) end)
+                        end
+                        wait(0.12)
+                    end
+                end
+            end
+        end)
+    end)
+
+    section(s, "Movement")
+    btn(s, "Teleport to Safe Zone (spawn)", function()
+        local spawnPart = Workspace:FindFirstChild("SpawnLocation") or Workspace:FindFirstChild("Spawn") or Workspace:FindFirstChild("SafeZone")
+        if spawnPart and spawnPart:IsA("BasePart") then
+            teleportPlayerTo(spawnPart.CFrame)
+        else
+            local cam = workspace.CurrentCamera
+            if cam then teleportPlayerTo(CFrame.new(cam.CFrame.Position + Vector3.new(0,10,0))) end
+        end
+    end)
+end
+
+-- ====== Populate Auto page ======
+do
+    local s = pages["Auto"].Scroll
+    section(s, "Auto Utilities")
+    toggle(s, "AFK Mode (tiny wiggle)", false, function(v) st.afk = v end)
+    toggle(s, "Auto Fill Hunger (food tools)", false, function(v) st.autoFillHunger = v end)
+    toggle(s, "Auto Collect Items (bring to you)", false, function(v) st.collectItems = v end)
+    toggle(s, "Infinite Stamina (attempt)", false, function(v) st.infiniteStamina = v end)
+    toggle(s, "Infinite Health (attempt)", false, function(v) st.infiniteHealth = v end)
+end
+
+-- ====== Populate ESP page ======
+do
+    local s = pages["ESP"].Scroll
+    section(s, "ESP Options")
+    toggle(s, "ESP On/Off", false, function(v) st.esp = v end)
+    toggle(s, "Show distance (meters)", true, function(v) st.espDistance = v end)
+    section(s, "Legend")
+    local legend = new("Frame",{Parent=s, Size=UDim2.new(1,0,0,86), BackgroundTransparency=1})
+    local function legendRow(parent, color, txt)
+        local row = new("Frame",{Parent=parent, Size=UDim2.new(1,0,0,20), BackgroundTransparency=1})
+        new("Frame",{Parent=row, Size=UDim2.new(0,18,0,18), Position=UDim2.new(0,0,0,1), BackgroundColor3=color})
+        new("TextLabel",{Parent=row, Size=UDim2.new(1,-26,0,20), Position=UDim2.new(0,26,0,0), BackgroundTransparency=1, Text=txt, Font=Enum.Font.Gotham, TextSize=13, TextColor3=Color3.fromRGB(60,60,70)})
+    end
+    legendRow(legend, COLORS.med, "Medkits / Bandages")
+    legendRow(legend, COLORS.food, "Food")
+    legendRow(legend, COLORS.fuel, "Fuel / Logs")
+    legendRow(legend, COLORS.scrap, "Scrap / Parts")
+    legendRow(legend, COLORS.kid, "Kids / NPCs")
+    legendRow(legend, COLORS.player, "Players")
+end
+
+-- ====== Dragging & collapse ======
+local dragging = false
+local dragStart = Vector2.new()
+local startPos = Vector2.new()
+titleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = UserInputService:GetMouseLocation()
+        startPos = Vector2.new(win.Position.X.Offset, win.Position.Y.Offset)
+    end
+end)
+UserInputService.InputChanged:Connect(function(inp)
+    if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+        local pos = UserInputService:GetMouseLocation()
+        local delta = pos - dragStart
+        local newX = startPos.X + delta.X
+        local newY = startPos.Y + delta.Y
+        local V = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280,720)
+        win.Position = UDim2.new(0, math.clamp(newX, 6, V.X - WIN_W - 6), 0, math.clamp(newY, 6, V.Y - WIN_H - 6))
+    end
+end)
+titleBar.InputEnded:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+
+titleLabel.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        -- toggle all pages visibility (expand/collapse)
+        if st.visible then
+            TweenService:Create(win, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Position = UDim2.new(win.Position.X.Scale, - (WIN_W - 36), win.Position.Y.Scale, win.Position.Y.Offset)}):Play()
+            st.visible = false
+            collapseBtn.Text = "+"
+        else
+            TweenService:Create(win, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Position = defaultPos}):Play()
+            st.visible = true
+            collapseBtn.Text = "-"
+        end
+    end
+end)
+
+collapseBtn.MouseButton1Click:Connect(function()
+    if st.visible then
+        TweenService:Create(win, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Position = UDim2.new(win.Position.X.Scale, - (WIN_W - 36), win.Position.Y.Scale, win.Position.Y.Offset)}):Play()
+        st.visible = false
+        collapseBtn.Text = "+"
+    else
+        TweenService:Create(win, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Position = defaultPos}):Play()
+        st.visible = true
+        collapseBtn.Text = "-"
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        if st.visible then
+            TweenService:Create(win, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Position = UDim2.new(win.Position.X.Scale, - (WIN_W - 36), win.Position.Y.Scale, win.Position.Y.Offset)}):Play()
+            st.visible = false
+            collapseBtn.Text = "+"
+        else
+            TweenService:Create(win, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Position = defaultPos}):Play()
+            st.visible = true
+            collapseBtn.Text = "-"
+        end
+    end
+end)
+
+-- ====== ESP System ======
+local espFolder = new("Folder", {Parent = gui, Name = "JEYK_ESP"})
+local espIndex = {} -- map key -> billboard
+
+local function makeBillboard(name, adornee, color, text)
+    if not adornee or not adornee:IsA("BasePart") then return nil end
+    local id = tostring(adornee:GetDebugId())
+    if espIndex[id] then return espIndex[id] end
+    local bg = new("BillboardGui", {Parent = espFolder, Adornee = adornee, Size = UDim2.new(0,160,0,34), AlwaysOnTop = true, Name = "ESP_"..name.."_"..id})
+    bg.MaxDistance = 1000
+    bg.StudsOffset = Vector3.new(0, 1.6, 0)
+    local frame = new("Frame", {Parent = bg, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1})
+    local lbl = new("TextLabel", {Parent = frame, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = text or name, Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = color or Color3.new(1,1,1), TextStrokeColor3 = Color3.new(0,0,0), TextStrokeTransparency = 0.2, TextYAlignment = Enum.TextYAlignment.Center})
+    espIndex[id] = {gui = bg, label = lbl, adornee = adornee}
+    return espIndex[id]
+end
+
+local function removeESPForPart(part)
+    if not part then return end
+    local id = tostring(part:GetDebugId())
+    local entry = espIndex[id]
+    if entry then
+        pcall(function() entry.gui:Destroy() end)
+        espIndex[id] = nil
+    end
+end
+
+local function updateESP()
+    -- remove invalid
+    for id,entry in pairs(espIndex) do
+        if not entry or not entry.adornee or not entry.adornee.Parent then
+            pcall(function() if entry.gui then entry.gui:Destroy() end end)
+            espIndex[id] = nil
+        else
+            -- update text (distance)
+            if entry.adornee and entry.label and st.espDistance then
+                local hrp = hrpOf(LocalPlayer.Character)
+                if hrp then
+                    local dist = (entry.adornee.Position - hrp.Position).Magnitude
+                    entry.label.Text = entry.label.Text:match("^[^%[]+") .. string.format(" [%.1fm]", dist)
+                end
+            end
+        end
+    end
+end
+
+-- scanner that creates/updates ESP tags based on categories
+local function scanAndUpdateESP()
+    if not st.esp then
+        -- clear all
+        for id,entry in pairs(espIndex) do pcall(function() entry.gui:Destroy() end) end
+        espIndex = {}
+        return
+    end
+
+    local hrp = hrpOf(LocalPlayer.Character)
+    for _,obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") or obj:IsA("Model") or obj:IsA("Tool") then
+            local nm = tostring(obj.Name):lower()
+            -- check players
+            if obj.Parent and Players:FindFirstChild(obj.Parent.Name) then
+                -- it's a character part/model
+                local pl = Players:FindFirstChild(obj.Parent.Name)
+                if pl and pl ~= LocalPlayer and pl.Character and hrp then
+                    local targetPart = hrpOf(pl.Character)
+                    if targetPart then
+                        local label = pl.Name .. (st.espDistance and (" [" .. tostring(math.floor((targetPart.Position - hrp.Position).Magnitude)) .. "m]") or "")
+                        makeBillboard(pl.Name, targetPart, COLORS.player, label)
+                    end
+                end
+            else
+                -- items and NPCs
+                if strContainsAny(nm, MEDKIT_NAMES) then
+                    local part = obj:IsA("BasePart") and obj or (obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart"))
+                    if part then makeBillboard(obj.Name, part, COLORS.med, obj.Name) end
+                elseif strContainsAny(nm, FOOD_NAMES) then
+                    local part = obj:IsA("BasePart") and obj or (obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart"))
+                    if part then makeBillboard(obj.Name, part, COLORS.food, obj.Name) end
+                elseif strContainsAny(nm, FUEL_NAMES) then
+                    local part = obj:IsA("BasePart") and obj or (obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart"))
+                    if part then makeBillboard(obj.Name, part, COLORS.fuel, obj.Name) end
+                elseif strContainsAny(nm, SCRAP_NAMES) then
+                    local part = obj:IsA("BasePart") and obj or (obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart"))
+                    if part then makeBillboard(obj.Name, part, COLORS.scrap, obj.Name) end
+                elseif strContainsAny(nm, KID_NAMES) then
+                    local part = obj:IsA("BasePart") and obj or (obj:FindFirstChildWhichIsA("BasePart"))
+                    if part then makeBillboard(obj.Name, part, COLORS.kid, obj.Name) end
+                end
+            end
+        end
+    end
+    updateESP()
+end
+
+-- periodic ESP refresh
+spawn(function()
+    while gui.Parent do
+        if st.esp then
+            pcall(scanAndUpdateESP)
+        else
+            -- clear if turned off
+            for id,entry in pairs(espIndex) do
+                pcall(function() entry.gui:Destroy() end)
+                espIndex[id] = nil
+            end
+        end
+        wait(1.0)
+    end
+end)
+
+-- ====== Core feature loops ======
+-- Auto fill hunger (attempt to equip food tools & fire common remotes)
+spawn(function()
+    while gui.Parent do
+        if st.autoFillHunger then
+            pcall(function()
+                local bp = LocalPlayer:FindFirstChild("Backpack")
+                if bp then
+                    for _,it in ipairs(bp:GetChildren()) do
+                        if it:IsA("Tool") then
+                            local nm = tostring(it.Name):lower()
+                            if strContainsAny(nm, FOOD_NAMES) then
+                                it.Parent = LocalPlayer.Character
+                                wait(0.18)
+                                -- attempt to activate common remotes inside tool
+                                for _,c in ipairs(it:GetDescendants()) do
+                                    if c:IsA("RemoteEvent") then
+                                        pcall(function() c:FireServer() end)
+                                    elseif c:IsA("RemoteFunction") then
+                                        pcall(function() c:InvokeServer() end)
+                                    end
+                                end
+                                wait(0.4)
+                                it.Parent = bp
+                                break
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        wait(4)
+    end
+end)
+
+-- Auto collect (bring items to player)
+spawn(function()
+    while gui.Parent do
+        if st.collectItems then
+            local char = LocalPlayer.Character
+            local hrp = hrpOf(char)
+            if hrp then
+                for _,v in ipairs(Workspace:GetDescendants()) do
+                    local nm = tostring(v.Name):lower()
+                    if v:IsA("BasePart") then
+                        if strContainsAny(nm, FOOD_NAMES) or strContainsAny(nm, SCRAP_NAMES) or strContainsAny(nm, FUEL_NAMES) or strContainsAny(nm, MEDKIT_NAMES) then
+                            pcall(function() v.CFrame = hrp.CFrame + Vector3.new(0,1.2,0) end)
+                            wait(0.08)
+                        end
+                    else
+                        if strContainsAny(nm, FOOD_NAMES) or strContainsAny(nm, SCRAP_NAMES) or strContainsAny(nm, FUEL_NAMES) or strContainsAny(nm, MEDKIT_NAMES) then
+                            local part = v:FindFirstChild("Handle") or v:FindFirstChildWhichIsA("BasePart")
+                            if part then pcall(function() part.CFrame = hrp.CFrame + Vector3.new(0,1.2,0) end) end
+                            wait(0.08)
+                        end
+                    end
+                end
+            end
+        end
+        wait(1.1)
+    end
+end)
+
+-- AFK wiggle (small movement to avoid idle)
+spawn(function()
+    while gui.Parent do
+        if st.afk then
+            local char = LocalPlayer.Character
+            local p = hrpOf(char)
+            if p then
+                pcall(function()
+                    p.CFrame = p.CFrame * CFrame.new(0, 0, 0.25)
+                    wait(0.55)
+                    p.CFrame = p.CFrame * CFrame.new(0, 0, -0.25)
+                end)
+            end
+        end
+        wait(3)
+    end
+end)
+
+-- Infinite stamina/health attempts
+spawn(function()
+    while gui.Parent do
+        if st.infiniteStamina then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hum = getHumanoid(char)
+                if hum and hum:FindFirstChild("Stamina") then
+                    hum.Stamina.Value = hum.Stamina.MaxValue
+                end
+            end)
+        end
+        if st.infiniteHealth then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hum = getHumanoid(char)
+                if hum then hum.Health = hum.MaxHealth end
+            end)
+        end
+        wait(0.8)
+    end
+end)
+
+-- ====== Finalize & info ======
+print("[JEYK SCRIPT v1.1] Loaded. Use title click or RightShift to toggle. ESP, Auto Fill, AFK, Bring Medkits, Auto Collect ready.")
+
+-- Short usage tips when loaded
+local function notify(text)
+    pcall(function()
+        if typeof(game:GetService("StarterGui"):FindFirstChild("SetCore")) == "function" then
+            pcall(function() game:GetService("StarterGui"):SetCore("SendNotification", {Title = "JEYK SCRIPT", Text = text, Duration = 3}) end)
+        end
+    end)
+end
+notify("JEYK SCRIPT loaded — open the menu (click title) to use features.")
 local function getHumanoid(ch)
     if not ch then return nil end
     return ch:FindFirstChildOfClass("Humanoid")
