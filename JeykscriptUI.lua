@@ -1,311 +1,269 @@
--- Floating Toggle Button & Expandable Drawer UI for Jeykscript
+-- Paste into PlayerGui / Executor for UI testing and prototyping only.
+-- DOES NOT modify workspace, humanoids, inventory, or other players.
 
-local player = game.Players.LocalPlayer
-local gui = Instance.new("ScreenGui")
-gui.Name = "JeykscriptFloatingUI"
-gui.Parent = player:WaitForChild("PlayerGui")
-gui.ResetOnSpawn = false
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
 
--- Floating Header Bar
-local headerBar = Instance.new("TextButton") -- Change to TextButton for click support
-headerBar.Size = UDim2.new(0, 230, 0, 52)
-headerBar.Position = UDim2.new(0.5, -115, 0, 16)
-headerBar.BackgroundColor3 = Color3.fromRGB(35, 20, 60)
-headerBar.BorderSizePixel = 2
-headerBar.BorderColor3 = Color3.fromRGB(120, 0, 255)
-headerBar.AnchorPoint = Vector2.new(0.5, 0)
-headerBar.Text = ""
-headerBar.AutoButtonColor = false
-headerBar.Parent = gui
+local parentGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local dragIcon = Instance.new("TextLabel")
-dragIcon.Size = UDim2.new(0, 36, 0, 36)
-dragIcon.Position = UDim2.new(0, 8, 0, 8)
-dragIcon.BackgroundTransparency = 1
-dragIcon.Text = "↕"
-dragIcon.TextColor3 = Color3.fromRGB(200,200,255)
-dragIcon.Font = Enum.Font.GothamBold
-dragIcon.TextSize = 28
-dragIcon.Parent = headerBar
+-- Remove old
+local existing = parentGui:FindFirstChild("JEYK_UI_SAFE")
+if existing then existing:Destroy() end
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 1, 0)
-title.Position = UDim2.new(0, 46, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "Jeykscript"
-title.TextColor3 = Color3.fromRGB(255,255,255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 24
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = headerBar
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "JEYK_UI_SAFE"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = parentGui
 
--- Make headerBar draggable
-local dragging, dragStart, startPos
-headerBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = headerBar.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
+-- Basic sizes
+local WIN_W, WIN_H = 880, 520
+local leftW = 220
+
+-- Utility constructors
+local function new(class, props)
+    local o = Instance.new(class)
+    if props then
+        for k,v in pairs(props) do
+            if k == "Parent" then o.Parent = v else pcall(function() o[k] = v end) end
+        end
+    end
+    return o
+end
+
+-- Main window
+local win = new("Frame", {
+    Parent = screenGui,
+    Size = UDim2.new(0, WIN_W, 0, WIN_H),
+    Position = UDim2.new(0.06, 0, 0.12, 0),
+    BackgroundColor3 = Color3.fromRGB(240,240,243),
+    BorderSizePixel = 0,
+})
+new("UICorner", {Parent = win, CornerRadius = UDim.new(0,14)})
+new("UIStroke", {Parent = win, Color = Color3.fromRGB(220,220,225), Thickness = 2, Transparency = 0.08})
+
+-- Titlebar (draggable)
+local titleBar = new("Frame", {Parent = win, Size = UDim2.new(1,0,0,60), BackgroundTransparency = 1})
+local titleLabel = new("TextLabel", {
+    Parent = titleBar, Text = "JEYK SCRIPT (SAFE DEMO)", Font = Enum.Font.GothamBold, TextSize = 20,
+    TextColor3 = Color3.fromRGB(30,30,35), BackgroundTransparency = 1, Position = UDim2.new(0, 18, 0, 14), Size = UDim2.new(0.7,0,0,32),
+    TextXAlignment = Enum.TextXAlignment.Left,
+})
+local collapseBtn = new("TextButton", {
+    Parent = titleBar, Size = UDim2.new(0, 36, 0, 36), Position = UDim2.new(1, -48, 0, 12),
+    Text = "-", BackgroundColor3 = Color3.fromRGB(230,230,235), Font = Enum.Font.GothamBold, TextSize = 20, TextColor3 = Color3.fromRGB(40,40,45)
+})
+new("UICorner", {Parent = collapseBtn, CornerRadius = UDim.new(0,8)})
+
+-- Left sidebar (tabs)
+local sidebar = new("Frame", {Parent = win, Size = UDim2.new(0, leftW, 1, -60), Position = UDim2.new(0,0,0,60), BackgroundColor3 = Color3.fromRGB(245,245,247)})
+new("UICorner", {Parent = sidebar, CornerRadius = UDim.new(0,10)})
+local sbLayout = new("UIListLayout", {Parent = sidebar, Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder})
+new("UIPadding", {Parent = sidebar, PaddingTop = UDim.new(0,14), PaddingLeft = UDim.new(0,12)})
+
+local pageNames = {"Main","Items","Data","Visualize"}
+local pages = {}
+
+-- Right content area (pages)
+local content = new("Frame", {Parent = win, Size = UDim2.new(1, -leftW, 1, -60), Position = UDim2.new(0, leftW, 0, 60), BackgroundTransparency = 1})
+local contentHolder = new("Frame", {Parent = content, Size = UDim2.new(1,-24,1,-24), Position = UDim2.new(0,12,0,12), BackgroundTransparency = 1})
+
+-- Scroll helper
+local function makeScroll(parent)
+    local s = new("ScrollingFrame", {Parent = parent, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ScrollBarThickness = 8})
+    new("UIListLayout", {Parent = s, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0,8)})
+    new("UIPadding", {Parent = s, PaddingTop = UDim.new(0,8), PaddingLeft = UDim.new(0,8), PaddingRight = UDim.new(0,8), PaddingBottom = UDim.new(0,8)})
+    local layout = s:FindFirstChildOfClass("UIListLayout")
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        s.CanvasSize = UDim2.new(0,0,0, layout.AbsoluteContentSize.Y + 12)
+    end)
+    return s
+end
+
+-- Create sidebar buttons & page frames
+for i, name in ipairs(pageNames) do
+    local b = new("TextButton", {Parent = sidebar, Size = UDim2.new(1, -18, 0, 44), BackgroundColor3 = Color3.fromRGB(235,235,238), Text = name, Font = Enum.Font.GothamSemibold, TextSize = 16, TextColor3 = Color3.fromRGB(40,40,40)})
+    new("UICorner", {Parent = b, CornerRadius = UDim.new(0,10)})
+    local pg = new("Frame", {Parent = contentHolder, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Visible = false})
+    pages[name] = {Frame = pg, Scroll = makeScroll(pg)}
+    b.MouseButton1Click:Connect(function()
+        for _,v in pairs(pages) do v.Frame.Visible = false end
+        pages[name].Frame.Visible = true
+    end)
+end
+pages["Main"].Frame.Visible = true
+
+-- Data lists (the items you asked — safe, static data)
+local Foods = {"Carrot","Corn","Pumpkin","Berry","Apple","Morsel","Steak","Ribs","Cake","Chili","Stew","Hearty Stew","Meat Sandwich","Bandage","Medkit"}
+local FuelScrap = {"Log","Chair","Biofuel","Coal","Fuel Canister","Oil Barrel","Bolt","Sheet Metal","UFO Junk","UFO Component","Broken Fan","Broken Radio","Broken Microwave","Tyre","Metal Chair","Old Car Engine","Washing Machine","Cultist Experiment","Cultist Prototype","UFO Scrap"}
+local Kids = {"Dino Kid","Kraken Kid","Squid Kid","Koala Kid"}
+local Tools = {"Old Axe","Good Axe","Ice Axe","Strong Axe","Chainsaw","Spear","Katana","Morningstar"}
+local Ranged = {"Revolver","Rifle","Tactical Shotgun","Snowball","Frozen Shuriken","Kunai","Ray Gun","Laser Cannon"}
+local Ammo = {"Revolver Ammo","Rifle Ammo","Shotgun Ammo"}
+local Sacks = {"Giant Sack"}
+local Armor = {"Leather Body","Iron Body","Thorn Body","Riot Shield","Alien Armor"}
+
+-- Helper to make section heading
+local function makeHeading(parent, text)
+    local l = new("TextLabel", {Parent = parent, Size = UDim2.new(1,0,0,28), BackgroundTransparency = 1, Text = text, Font = Enum.Font.GothamBold, TextSize = 16, TextColor3 = Color3.fromRGB(40,40,40), TextXAlignment = Enum.TextXAlignment.Left})
+    return l
+end
+
+-- Quick page content (Main)
+do
+    local s = pages["Main"].Scroll
+    makeHeading(s, "Quick Actions")
+    -- helper to create safe buttons
+    local function quickBtn(text, cb)
+        local b = new("TextButton", {Parent = s, Size = UDim2.new(1,0,0,44), BackgroundColor3 = Color3.fromRGB(245,245,247), Text = text, Font = Enum.Font.Gotham, TextSize = 16, TextColor3 = Color3.fromRGB(30,30,30)})
+        new("UICorner", {Parent = b, CornerRadius = UDim.new(0,8)})
+        b.MouseButton1Click:Connect(function()
+            pcall(cb)
         end)
     end
-end)
-headerBar.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        headerBar.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
 
--- Expanded Drawer UI (hidden by default)
-local drawer = Instance.new("Frame")
-drawer.Size = UDim2.new(0, 320, 0, 420)
-drawer.Position = UDim2.new(0.5, -160, 0, 72)
-drawer.BackgroundColor3 = Color3.fromRGB(45, 40, 65)
-drawer.BorderSizePixel = 0
-drawer.AnchorPoint = Vector2.new(0.5, 0)
-drawer.Visible = false
-drawer.Parent = gui
-
-local drawerTitle = Instance.new("TextLabel")
-drawerTitle.Size = UDim2.new(1, 0, 0, 44)
-drawerTitle.Position = UDim2.new(0, 0, 0, 0)
-drawerTitle.BackgroundTransparency = 1
-drawerTitle.Text = "Jeykscript - 99 Nights Cheats"
-drawerTitle.TextColor3 = Color3.fromRGB(255,255,255)
-drawerTitle.Font = Enum.Font.GothamBold
-drawerTitle.TextSize = 22
-drawerTitle.TextXAlignment = Enum.TextXAlignment.Center
-drawerTitle.Parent = drawer
-
--- Scrollable Cheats List
-local cheatScroll = Instance.new("ScrollingFrame")
-cheatScroll.Size = UDim2.new(1, -18, 1, -60)
-cheatScroll.Position = UDim2.new(0, 9, 0, 50)
-cheatScroll.BackgroundColor3 = Color3.fromRGB(38, 32, 54)
-cheatScroll.CanvasSize = UDim2.new(0, 0, 0, 420)
-cheatScroll.ScrollBarThickness = 8
-cheatScroll.BorderSizePixel = 0
-cheatScroll.Parent = drawer
-
--- Cheats Data
-local cheats = {
-    {name = "Kill Aura", desc = "Instantly kill all mobs in range", key = "killaura"},
-    {name = "Auto Farm Wood", desc = "Automatically cut down trees", key = "autowood"},
-    {name = "Bring Items", desc = "Brings all items to you", key = "bring"},
-    {name = "Auto Eat", desc = "Automatically eats food when hungry", key = "autoeat"},
-    {name = "Infinite Stamina", desc = "Never run out of stamina", key = "stamina"},
-    {name = "Visual ESP", desc = "See all mobs and items through walls", key = "esp"},
-    {name = "Teleport", desc = "Teleport to selected location", key = "teleport"},
-    {name = "No Hunger", desc = "Prevents hunger drain", key = "nohunger"},
-    {name = "Speed Boost", desc = "Walk/run faster", key = "speed"},
-    {name = "Night Vision", desc = "See clearly in darkness", key = "nightvision"},
-}
-
-local cheatStates = {}
-local cheatFuncs = {}
-
--- Cheat implementations:
-cheatFuncs["killaura"] = function(state)
-    if state then
-        if not _G.JeykKillAura then
-            _G.JeykKillAura = true
-            spawn(function()
-                while _G.JeykKillAura do
-                    for _, mob in pairs(workspace:FindFirstChild("Mobs") and workspace.Mobs:GetChildren() or {}) do
-                        if mob:FindFirstChild("Humanoid") then
-                            mob.Humanoid.Health = 0
-                        end
-                    end
-                    wait(1)
-                end
-            end)
-        end
-    else
-        _G.JeykKillAura = false
-    end
+    quickBtn("Simulate: Bring All Items (SAFE)", function()
+        print("[SIM] Bring All Items clicked (SAFE simulation).")
+    end)
+    quickBtn("Simulate: Toggle KillAura Targets (SAFE)", function()
+        print("[SIM] KillAura toggle clicked (SAFE simulation).")
+    end)
+    quickBtn("Open Items Page", function() for _,v in pairs(pages) do v.Frame.Visible = false end pages["Items"].Frame.Visible = true end)
 end
 
-cheatFuncs["autowood"] = function(state)
-    if state then
-        if not _G.JeykAutoWood then
-            _G.JeykAutoWood = true
-            spawn(function()
-                while _G.JeykAutoWood do
-                    for _, tree in pairs(workspace:FindFirstChild("Trees") and workspace.Trees:GetChildren() or {}) do
-                        if tree:FindFirstChild("Health") then
-                            tree.Health.Value = 0
-                        end
-                    end
-                    wait(2)
-                end
-            end)
-        end
-    else
-        _G.JeykAutoWood = false
+-- Items page: lists of everything
+do
+    local s = pages["Items"].Scroll
+    makeHeading(s, "Food / Healing Items")
+    for _,n in ipairs(Foods) do
+        local row = new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15, TextColor3 = Color3.fromRGB(35,35,35), TextXAlignment = Enum.TextXAlignment.Left})
     end
+
+    makeHeading(s, "Fuel / Scrap Items")
+    for _,n in ipairs(FuelScrap) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15, TextColor3 = Color3.fromRGB(35,35,35)}) end
+
+    makeHeading(s, "Missing Children (Kids)")
+    for _,n in ipairs(Kids) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15, TextColor3 = Color3.fromRGB(35,35,35)}) end
+
+    makeHeading(s, "Tools / Melee")
+    for _,n in ipairs(Tools) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15, TextColor3 = Color3.fromRGB(35,35,35)}) end
+
+    makeHeading(s, "Ranged / Ammo / Sacks / Armor")
+    for _,n in ipairs(Ranged) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15}) end
+    for _,n in ipairs(Ammo) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15}) end
+    for _,n in ipairs(Sacks) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15}) end
+    for _,n in ipairs(Armor) do new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,28), Text = "• "..n, BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 15}) end
 end
 
-cheatFuncs["bring"] = function(state)
-    if state then
-        for _, item in pairs(workspace:FindFirstChild("Items") and workspace.Items:GetChildren() or {}) do
-            if item:IsA("BasePart") then
-                local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    item.CFrame = hrp.CFrame
-                end
+-- Data page: search & copy lists
+do
+    local s = pages["Data"].Scroll
+    makeHeading(s, "Data Export")
+    local box = new("TextBox", {Parent = s, Size = UDim2.new(1,0,0,140), Text = "Paste or edit lists here (JSON format or plain lines)", TextWrapped = true, ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 14})
+    new("UICorner", {Parent = box, CornerRadius = UDim.new(0,8)})
+    local bexport = new("TextButton", {Parent = s, Size = UDim2.new(0.48, -6, 0, 36), Text = "Copy Foods as Lua", Font = Enum.Font.Gotham, TextSize = 14})
+    local bcopy = new("TextButton", {Parent = s, Size = UDim2.new(0.48, -6, 0, 36), Position = UDim2.new(0.52, 6, 0, 0), Text = "Copy All Items", Font = Enum.Font.Gotham, TextSize = 14})
+    new("UICorner", {Parent = bexport, CornerRadius = UDim.new(0,8)})
+    new("UICorner", {Parent = bcopy, CornerRadius = UDim.new(0,8)})
+    bexport.MouseButton1Click:Connect(function()
+        local text = "-- Foods\nlocal Foods = {\n"
+        for _,v in ipairs(Foods) do text = text .. ("    %q,\n"):format(v) end
+        text = text .. "}\nreturn Foods"
+        -- copy to clipboard if supported (most mobile executors won't)
+        pcall(function() setclipboard(text) end)
+        print("[SIM] Foods exported to clipboard (or printed below).")
+        print(text)
+    end)
+    bcopy.MouseButton1Click:Connect(function()
+        local t = {}
+        for _,v in ipairs(Foods) do table.insert(t, v) end
+        for _,v in ipairs(FuelScrap) do table.insert(t, v) end
+        for _,v in ipairs(Kids) do table.insert(t, v) end
+        local out = table.concat(t, "\n")
+        pcall(function() setclipboard(out) end)
+        print("[SIM] Combined list copied/printed.")
+        print(out)
+    end)
+end
+
+-- Visualize page: safe simulated markers
+do
+    local s = pages["Visualize"].Scroll
+    makeHeading(s, "Simulated Visuals")
+    local info = new("TextLabel", {Parent = s, Size = UDim2.new(1,0,0,36), Text = "Toggle visualization (simulated markers on screen).", BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 14})
+    local vToggle = new("TextButton", {Parent = s, Size = UDim2.new(0,160,0,34), Text = "Toggle Visualize (SIM)", Font = Enum.Font.Gotham, TextSize = 14})
+    new("UICorner", {Parent = vToggle, CornerRadius = UDim.new(0,8)})
+    local markers = {}
+    local visualOn = false
+
+    local function createMarker(text, x, y)
+        local f = new("Frame", {Parent = screenGui, Size = UDim2.new(0,120,0,28), Position = UDim2.new(0, x, 0, y), BackgroundColor3 = Color3.fromRGB(50,50,60)})
+        new("UICorner", {Parent = f, CornerRadius = UDim.new(0,6)})
+        local l = new("TextLabel", {Parent = f, Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, Text = text, Font = Enum.Font.GothamSemibold, TextSize = 14, TextColor3 = Color3.fromRGB(255,255,255)})
+        return f
+    end
+
+    vToggle.MouseButton1Click:Connect(function()
+        visualOn = not visualOn
+        if visualOn then
+            -- create a handful of simulated markers (not world-tied)
+            for i=1,8 do
+                local name = (i <= #Foods) and Foods[i] or ("SimItem "..i)
+                local x = 0.55 + (i%3)*0.12
+                local y = 80 + (math.floor(i/3))*38
+                local m = createMarker(name, x, y)
+                table.insert(markers, m)
             end
+            print("[SIM] Visual markers created (simulation only).")
+        else
+            for _,m in ipairs(markers) do if m and m.Parent then m:Destroy() end end
+            markers = {}
+            print("[SIM] Visual markers removed.")
         end
+    end)
+end
+
+-- Collapse behavior
+local function setCollapsed(collapsed)
+    if collapsed then
+        TweenService:Create(win, TweenInfo.new(0.2), {Size = UDim2.new(0, 300, 0, 68)}):Play()
+    else
+        TweenService:Create(win, TweenInfo.new(0.2), {Size = UDim2.new(0, WIN_W, 0, WIN_H)}):Play()
     end
 end
 
-cheatFuncs["autoeat"] = function(state)
-    if state then
-        if not _G.JeykAutoEat then
-            _G.JeykAutoEat = true
-            spawn(function()
-                while _G.JeykAutoEat do
-                    local stats = player:FindFirstChild("Stats")
-                    if stats and stats:FindFirstChild("Hunger") and stats.Hunger.Value < 25 then
-                        print("Auto eat triggered!") -- Replace with actual eat logic if available
-                    end
-                    wait(2)
+collapseBtn.MouseButton1Click:Connect(function()
+    local small = (win.Size.X.Offset < 400)
+    setCollapsed(not small)
+end)
+
+-- Draggable behavior (title bar)
+do
+    local dragging = false
+    local dragStart = Vector2.new()
+    local startPos = Vector2.new()
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = UserInputService:GetMouseLocation()
+            startPos = Vector2.new(win.Position.X.Offset, win.Position.Y.Offset)
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
                 end
             end)
         end
-    else
-        _G.JeykAutoEat = false
-    end
-end
-
-cheatFuncs["stamina"] = function(state)
-    local stats = player:FindFirstChild("Stats")
-    if stats and stats:FindFirstChild("Stamina") then
-        stats.Stamina.Value = state and 100 or 50
-    end
-end
-
-cheatFuncs["esp"] = function(state)
-    for _, mob in pairs(workspace:FindFirstChild("Mobs") and workspace.Mobs:GetChildren() or {}) do
-        if mob:IsA("BasePart") then
-            mob.Material = state and Enum.Material.Neon or Enum.Material.Plastic
-            mob.Color = state and Color3.fromRGB(255,255,0) or Color3.fromRGB(255,255,255)
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local pos = UserInputService:GetMouseLocation()
+            local delta = pos - dragStart
+            win.Position = UDim2.new(0, math.clamp(startPos.X + delta.X, 6, workspace.CurrentCamera.ViewportSize.X - win.Size.X.Offset - 6), 0, math.clamp(startPos.Y + delta.Y, 6, workspace.CurrentCamera.ViewportSize.Y - win.Size.Y.Offset - 6))
         end
-    end
-    for _, item in pairs(workspace:FindFirstChild("Items") and workspace.Items:GetChildren() or {}) do
-        if item:IsA("BasePart") then
-            item.Material = state and Enum.Material.Neon or Enum.Material.Plastic
-            item.Color = state and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,255,255)
-        end
-    end
+    end)
 end
 
-cheatFuncs["teleport"] = function(state)
-    if state then
-        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            hrp.CFrame = CFrame.new(Vector3.new(0,50,0)) -- Example location, change as needed
-        end
-    end
-end
-
-cheatFuncs["nohunger"] = function(state)
-    local stats = player:FindFirstChild("Stats")
-    if stats and stats:FindFirstChild("Hunger") then
-        stats.Hunger.Value = state and 100 or 50
-    end
-end
-
-cheatFuncs["speed"] = function(state)
-    local char = player.Character
-    if char and char:FindFirstChild("Humanoid") then
-        char.Humanoid.WalkSpeed = state and 50 or 16
-    end
-end
-
-cheatFuncs["nightvision"] = function(state)
-    game.Lighting.Brightness = state and 10 or 2
-end
-
-for i, cheat in ipairs(cheats) do
-    cheatStates[cheat.key] = false
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -14, 0, 36)
-    btn.Position = UDim2.new(0, 7, 0, (i-1)*42)
-    btn.BackgroundColor3 = Color3.fromRGB(52,44,74)
-    btn.BorderSizePixel = 0
-    btn.Text = cheat.name
-    btn.TextColor3 = Color3.fromRGB(220,220,220)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 18
-    btn.Parent = cheatScroll
-
-    local desc = Instance.new("TextLabel")
-    desc.Size = UDim2.new(1, -20, 0, 16)
-    desc.Position = UDim2.new(0, 12, 0, (i-1)*42 + 22)
-    desc.BackgroundTransparency = 1
-    desc.Text = cheat.desc
-    desc.TextColor3 = Color3.fromRGB(170,170,190)
-    desc.Font = Enum.Font.Gotham
-    desc.TextSize = 12
-    desc.TextXAlignment = Enum.TextXAlignment.Left
-    desc.Parent = cheatScroll
-
-    local toggleBox = Instance.new("TextButton")
-    toggleBox.Size = UDim2.new(0, 24, 0, 24)
-    toggleBox.Position = UDim2.new(1, -34, 0, (i-1)*42 + 6)
-    toggleBox.BackgroundColor3 = cheatStates[cheat.key] and Color3.fromRGB(68,180,68) or Color3.fromRGB(66,66,74)
-    toggleBox.BorderSizePixel = 0
-    toggleBox.Text = ""
-    toggleBox.Parent = cheatScroll
-
-    local function updateToggle()
-        toggleBox.BackgroundColor3 = cheatStates[cheat.key] and Color3.fromRGB(68,180,68) or Color3.fromRGB(66,66,74)
-    end
-
-    local function toggleCheat()
-        cheatStates[cheat.key] = not cheatStates[cheat.key]
-        updateToggle()
-        print("Toggled:", cheat.key, cheatStates[cheat.key])
-        if cheatFuncs[cheat.key] then
-            cheatFuncs[cheat.key](cheatStates[cheat.key])
-        end
-    end
-
-    btn.MouseButton1Click:Connect(toggleCheat)
-    toggleBox.MouseButton1Click:Connect(toggleCheat)
-end
-
--- Show/Hide drawer when clicking headerBar
-headerBar.MouseButton1Click:Connect(function()
-    drawer.Visible = not drawer.Visible
-    updateHeaderShrink()
-end)
-
-function updateHeaderShrink()
-    if drawer.Visible then
-        headerBar.Size = UDim2.new(0, 230, 0, 52)
-        title.TextSize = 24
-    else
-        headerBar.Size = UDim2.new(0, 130, 0, 38)
-        title.TextSize = 18
-    end
-end
-
-drawer:GetPropertyChangedSignal("Visible"):Connect(updateHeaderShrink)
-
--- Start small
-headerBar.Size = UDim2.new(0, 130, 0, 38)
-title.TextSize = 18
-
--- ESC closes drawer
-game:GetService("UserInputService").InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Escape and drawer.Visible then
-        drawer.Visible = false
-        updateHeaderShrink()
-    end
-end)
+-- Finalize: small start state
+setCollapsed(false)
+print("[JEYK SAFE UI] Loaded. This UI is a SAFE simulation only — no game objects are modified.")
