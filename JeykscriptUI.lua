@@ -1,270 +1,187 @@
--- Jeykscript UI for 99 Nights in Forest
--- Features: Kill Aura & Auto Farm Wood, styled per reference
+-- Jeykscript UI for 99 Nights in Forest v1.8.0
+-- Features: Working buttons, scrolling, selectable cheats
 
 local player = game.Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 
--- Main UI
-local gui = Instance.new("ScreenGui", player.PlayerGui)
+-- Create Main UI
+local gui = Instance.new("ScreenGui")
 gui.Name = "Jeykscript"
+gui.Parent = player:WaitForChild("PlayerGui")
 
-local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 400, 0, 500)
-main.Position = UDim2.new(0.5, -200, 0.5, -250)
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 380, 0, 420)
+main.Position = UDim2.new(0.5, -190, 0.5, -210)
 main.BackgroundColor3 = Color3.fromRGB(32, 22, 46)
 main.BorderSizePixel = 0
 main.AnchorPoint = Vector2.new(0.5, 0.5)
-main.BackgroundTransparency = 0.15
-main.ClipsDescendants = true
+main.Parent = gui
 
--- Top Bar
-local topBar = Instance.new("Frame", main)
-topBar.Size = UDim2.new(1, 0, 0, 58)
-topBar.Position = UDim2.new(0, 0, 0, 0)
-topBar.BackgroundTransparency = 1
-
-local title = Instance.new("TextLabel", topBar)
-title.Size = UDim2.new(1, -50, 0, 34)
-title.Position = UDim2.new(0, 16, 0, 8)
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 50)
+title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "Jeykscript"
+title.Text = "Jeykscript - 99 Nights Cheats"
 title.TextColor3 = Color3.fromRGB(255,255,255)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 28
-title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
 
-local subtitle = Instance.new("TextLabel", topBar)
-subtitle.Size = UDim2.new(1, -50, 0, 20)
-subtitle.Position = UDim2.new(0, 16, 0, 38)
-subtitle.BackgroundTransparency = 1
-subtitle.Text = "99 Nights in Forest 1.8.0"
-subtitle.TextColor3 = Color3.fromRGB(185,185,185)
-subtitle.Font = Enum.Font.Gotham
-subtitle.TextSize = 16
-subtitle.TextXAlignment = Enum.TextXAlignment.Left
+-- Scrollable Cheats List
+local cheatScroll = Instance.new("ScrollingFrame")
+cheatScroll.Size = UDim2.new(1, -20, 1, -80)
+cheatScroll.Position = UDim2.new(0, 10, 0, 60)
+cheatScroll.BackgroundColor3 = Color3.fromRGB(25, 20, 38)
+cheatScroll.CanvasSize = UDim2.new(0, 0, 0, 360)
+cheatScroll.ScrollBarThickness = 8
+cheatScroll.BorderSizePixel = 0
+cheatScroll.Parent = main
 
--- Sidebar
-local sidebar = Instance.new("Frame", main)
-sidebar.Size = UDim2.new(0, 120, 1, -58)
-sidebar.Position = UDim2.new(0, 0, 0, 58)
-sidebar.BackgroundTransparency = 1
-
-local menuItems = {
-    {text = "Main", icon = "⟪⟫"},
-    {text = "Bring Items", icon = "🍎"},
-    {text = "Old Bring Items", icon = "🍏"},
-    {text = "Auto", icon = "≡"},
-    {text = "Visuals", icon = "👁️"},
-    {text = "Teleport", icon = "🧭"},
+-- Cheats Data
+local cheats = {
+    {name = "Kill Aura", desc = "Instantly kill all mobs in range", enabled = false},
+    {name = "Auto Farm Wood", desc = "Automatically cut down trees", enabled = false},
+    {name = "Bring Items", desc = "Brings all items to you", enabled = false},
+    {name = "Auto Eat", desc = "Automatically eats food when hungry", enabled = false},
+    {name = "Infinite Stamina", desc = "Never run out of stamina", enabled = false},
+    {name = "Visual ESP", desc = "See all mobs and items through walls", enabled = false},
+    {name = "Teleport", desc = "Teleport to selected location", enabled = false},
+    {name = "No Hunger", desc = "Prevents hunger drain", enabled = false},
+    {name = "Speed Boost", desc = "Walk/run faster", enabled = false},
+    {name = "Night Vision", desc = "See clearly in darkness", enabled = false},
 }
-for i, item in ipairs(menuItems) do
-    local btn = Instance.new("TextLabel", sidebar)
-    btn.Size = UDim2.new(1, -20, 0, 34)
-    btn.Position = UDim2.new(0, 10, 0, (i-1)*38)
-    btn.BackgroundTransparency = 1
-    btn.Text = item.icon .. "  " .. item.text
+
+-- Dynamically make each cheat a button with description
+for i, cheat in ipairs(cheats) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -12, 0, 34)
+    btn.Position = UDim2.new(0, 6, 0, (i-1)*38)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 35, 58)
+    btn.BorderSizePixel = 0
+    btn.Text = cheat.name
     btn.TextColor3 = Color3.fromRGB(220,220,220)
-    btn.Font = Enum.Font.Gotham
+    btn.Font = Enum.Font.GothamSemibold
     btn.TextSize = 18
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-end
+    btn.Parent = cheatScroll
 
--- Profile
-local profile = Instance.new("Frame", main)
-profile.Size = UDim2.new(0, 120, 0, 56)
-profile.Position = UDim2.new(0, 0, 1, -56)
-profile.BackgroundTransparency = 1
+    local desc = Instance.new("TextLabel")
+    desc.Size = UDim2.new(1, -16, 0, 18)
+    desc.Position = UDim2.new(0, 8, 0, (i-1)*38 + 18)
+    desc.BackgroundTransparency = 1
+    desc.Text = cheat.desc
+    desc.TextColor3 = Color3.fromRGB(180,180,180)
+    desc.Font = Enum.Font.Gotham
+    desc.TextSize = 13
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.Parent = cheatScroll
 
-local profileName = Instance.new("TextLabel", profile)
-profileName.Size = UDim2.new(1, -24, 0, 30)
-profileName.Position = UDim2.new(0, 24, 0, 6)
-profileName.BackgroundTransparency = 1
-profileName.Text = "Jeyk\n@Jeyk0322"
-profileName.TextColor3 = Color3.fromRGB(255,255,255)
-profileName.Font = Enum.Font.GothamSemibold
-profileName.TextSize = 16
-profileName.TextYAlignment = Enum.TextYAlignment.Top
-profileName.TextXAlignment = Enum.TextXAlignment.Left
-
--- Main Content Panel
-local content = Instance.new("Frame", main)
-content.Size = UDim2.new(1, -140, 1, -78)
-content.Position = UDim2.new(0, 130, 0, 68)
-content.BackgroundTransparency = 1
-
--- Kill Aura Section
-local killAuraTitle = Instance.new("TextLabel", content)
-killAuraTitle.Size = UDim2.new(1, 0, 0, 30)
-killAuraTitle.Position = UDim2.new(0, 0, 0, 0)
-killAuraTitle.BackgroundTransparency = 1
-killAuraTitle.Text = "Kill Aura"
-killAuraTitle.TextColor3 = Color3.fromRGB(255,255,255)
-killAuraTitle.Font = Enum.Font.GothamBold
-killAuraTitle.TextSize = 22
-killAuraTitle.TextXAlignment = Enum.TextXAlignment.Left
-
-local targetsLabel = Instance.new("TextLabel", content)
-targetsLabel.Size = UDim2.new(0.5, -10, 0, 30)
-targetsLabel.Position = UDim2.new(0, 0, 0, 38)
-targetsLabel.BackgroundTransparency = 1
-targetsLabel.Text = "Kill Aura Targets"
-targetsLabel.TextColor3 = Color3.fromRGB(200,200,200)
-targetsLabel.Font = Enum.Font.Gotham
-targetsLabel.TextSize = 16
-targetsLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local targetsDropdown = Instance.new("TextButton", content)
-targetsDropdown.Size = UDim2.new(0.5, -10, 0, 28)
-targetsDropdown.Position = UDim2.new(0.5, 10, 0, 38)
-targetsDropdown.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-targetsDropdown.TextColor3 = Color3.fromRGB(220,220,220)
-targetsDropdown.Font = Enum.Font.Gotham
-targetsDropdown.TextSize = 16
-targetsDropdown.Text = "All ▼"
-
-local auraLabel = Instance.new("TextLabel", content)
-auraLabel.Size = UDim2.new(0.5, -10, 0, 30)
-auraLabel.Position = UDim2.new(0, 0, 0, 74)
-auraLabel.BackgroundTransparency = 1
-auraLabel.Text = "Kill Aura"
-auraLabel.TextColor3 = Color3.fromRGB(200,200,200)
-auraLabel.Font = Enum.Font.Gotham
-auraLabel.TextSize = 16
-auraLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local auraToggle = Instance.new("TextButton", content)
-auraToggle.Size = UDim2.new(0.5, -10, 0, 28)
-auraToggle.Position = UDim2.new(0.5, 10, 0, 74)
-auraToggle.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-auraToggle.TextColor3 = Color3.fromRGB(220,220,220)
-auraToggle.Font = Enum.Font.Gotham
-auraToggle.TextSize = 16
-auraToggle.Text = "OFF"
-
-local rangeLabel = Instance.new("TextLabel", content)
-rangeLabel.Size = UDim2.new(0.5, -10, 0, 30)
-rangeLabel.Position = UDim2.new(0, 0, 0, 110)
-rangeLabel.BackgroundTransparency = 1
-rangeLabel.Text = "Kill Aura Range"
-rangeLabel.TextColor3 = Color3.fromRGB(200,200,200)
-rangeLabel.Font = Enum.Font.Gotham
-rangeLabel.TextSize = 16
-rangeLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local rangeSlider = Instance.new("Frame", content)
-rangeSlider.Size = UDim2.new(0.5, -10, 0, 28)
-rangeSlider.Position = UDim2.new(0.5, 10, 0, 110)
-rangeSlider.BackgroundTransparency = 1
-
-local rangeValue = Instance.new("TextLabel", rangeSlider)
-rangeValue.Size = UDim2.new(0.3, 0, 1, 0)
-rangeValue.Position = UDim2.new(0, 0, 0, 0)
-rangeValue.BackgroundTransparency = 1
-rangeValue.Text = "60"
-rangeValue.TextColor3 = Color3.fromRGB(220,220,220)
-rangeValue.Font = Enum.Font.Gotham
-rangeValue.TextSize = 16
-
-local sliderBtn = Instance.new("TextButton", rangeSlider)
-sliderBtn.Size = UDim2.new(0.7, -6, 1, 0)
-sliderBtn.Position = UDim2.new(0.3, 6, 0, 0)
-sliderBtn.BackgroundColor3 = Color3.fromRGB(80, 90, 110)
-sliderBtn.Text = ""
-sliderBtn.AutoButtonColor = false
-
-local farmTitle = Instance.new("TextLabel", content)
-farmTitle.Size = UDim2.new(1, 0, 0, 30)
-farmTitle.Position = UDim2.new(0, 0, 0, 158)
-farmTitle.BackgroundTransparency = 1
-farmTitle.Text = "Auto Farm Wood"
-farmTitle.TextColor3 = Color3.fromRGB(255,255,255)
-farmTitle.Font = Enum.Font.GothamBold
-farmTitle.TextSize = 22
-farmTitle.TextXAlignment = Enum.TextXAlignment.Left
-
-local woodLabel = Instance.new("TextLabel", content)
-woodLabel.Size = UDim2.new(0.5, -10, 0, 30)
-woodLabel.Position = UDim2.new(0, 0, 0, 196)
-woodLabel.BackgroundTransparency = 1
-woodLabel.Text = "Auto Farm Wood Type"
-woodLabel.TextColor3 = Color3.fromRGB(200,200,200)
-woodLabel.Font = Enum.Font.Gotham
-woodLabel.TextSize = 16
-woodLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local woodDropdown = Instance.new("TextButton", content)
-woodDropdown.Size = UDim2.new(0.5, -10, 0, 28)
-woodDropdown.Position = UDim2.new(0.5, 10, 0, 196)
-woodDropdown.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-woodDropdown.TextColor3 = Color3.fromRGB(220,220,220)
-woodDropdown.Font = Enum.Font.Gotham
-woodDropdown.TextSize = 16
-woodDropdown.Text = "Small Tree ▼"
-
-local killAuraActive = false
-local killAuraRange = 60
-local autoFarmWoodType = "Small Tree"
-local killAuraTargets = "All"
-
-local targetOptions = {"All", "Hostile", "Passive"}
-targetsDropdown.MouseButton1Click:Connect(function()
-    local idx = table.find(targetOptions, killAuraTargets)
-    idx = idx and idx + 1 or 1
-    if idx > #targetOptions then idx = 1 end
-    killAuraTargets = targetOptions[idx]
-    targetsDropdown.Text = killAuraTargets.." ▼"
-end)
-
-auraToggle.MouseButton1Click:Connect(function()
-    killAuraActive = not killAuraActive
-    auraToggle.Text = killAuraActive and "ON" or "OFF"
-end)
-
-sliderBtn.MouseButton1Click:Connect(function()
-    killAuraRange = killAuraRange + 10
-    if killAuraRange > 100 then killAuraRange = 10 end
-    rangeValue.Text = tostring(killAuraRange)
-end)
-
-local woodOptions = {"Small Tree", "Big Tree", "All"}
-woodDropdown.MouseButton1Click:Connect(function()
-    local idx = table.find(woodOptions, autoFarmWoodType)
-    idx = idx and idx + 1 or 1
-    if idx > #woodOptions then idx = 1 end
-    autoFarmWoodType = woodOptions[idx]
-    woodDropdown.Text = autoFarmWoodType.." ▼"
-end)
-
-spawn(function()
-    while true do
-        if killAuraActive and character and character.PrimaryPart then
-            for _, obj in ipairs(workspace:GetChildren()) do
-                if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj ~= character then
-                    local root = obj:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local dist = (character.PrimaryPart.Position - root.Position).Magnitude
-                        if dist <= killAuraRange then
-                            obj.Humanoid.Health = 0
+    btn.MouseButton1Click:Connect(function()
+        cheats[i].enabled = not cheats[i].enabled
+        btn.BackgroundColor3 = cheats[i].enabled and Color3.fromRGB(60, 130, 60) or Color3.fromRGB(40, 35, 58)
+        -- Trigger cheat logic
+        if cheats[i].enabled then
+            if cheat.name == "Kill Aura" then
+                spawn(function()
+                    while cheats[i].enabled do
+                        for _, obj in ipairs(workspace:GetChildren()) do
+                            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj ~= character then
+                                local root = obj:FindFirstChild("HumanoidRootPart")
+                                if root and (character.PrimaryPart.Position - root.Position).Magnitude < 60 then
+                                    obj.Humanoid.Health = 0
+                                end
+                            end
                         end
+                        wait(0.5)
+                    end
+                end)
+            elseif cheat.name == "Auto Farm Wood" then
+                spawn(function()
+                    while cheats[i].enabled do
+                        for _, tree in ipairs(workspace:GetChildren()) do
+                            if tree:IsA("Model") and tree.Name:find("Tree") and tree:FindFirstChild("Health") then
+                                tree.Health.Value = 0
+                            end
+                        end
+                        wait(1)
+                    end
+                end)
+            elseif cheat.name == "Bring Items" then
+                for _, item in ipairs(workspace:GetChildren()) do
+                    if item:IsA("Model") and item:FindFirstChild("Handle") then
+                        item.Handle.CFrame = character.PrimaryPart.CFrame + Vector3.new(2,0,2)
                     end
                 end
+            elseif cheat.name == "Auto Eat" then
+                spawn(function()
+                    while cheats[i].enabled do
+                        if player.Character and player.Character:FindFirstChild("Hunger") and player.Character.Hunger.Value < 30 then
+                            -- Replace with your food eating logic if available
+                        end
+                        wait(5)
+                    end
+                end)
+            elseif cheat.name == "Infinite Stamina" then
+                spawn(function()
+                    while cheats[i].enabled do
+                        if player.Character and player.Character:FindFirstChild("Stamina") then
+                            player.Character.Stamina.Value = 100
+                        end
+                        wait(1)
+                    end
+                end)
+            elseif cheat.name == "Visual ESP" then
+                -- ESP logic here (add highlights, etc.)
+            elseif cheat.name == "Teleport" then
+                if character and character.PrimaryPart then
+                    character:SetPrimaryPartCFrame(CFrame.new(0, 50, 0)) -- Example location
+                end
+            elseif cheat.name == "No Hunger" then
+                spawn(function()
+                    while cheats[i].enabled do
+                        if player.Character and player.Character:FindFirstChild("Hunger") then
+                            player.Character.Hunger.Value = 100
+                        end
+                        wait(1)
+                    end
+                end)
+            elseif cheat.name == "Speed Boost" then
+                if character and character:FindFirstChildOfClass("Humanoid") then
+                    character:FindFirstChildOfClass("Humanoid").WalkSpeed = 40
+                end
+            elseif cheat.name == "Night Vision" then
+                game.Lighting.Brightness = 5
+            end
+        else
+            -- Disable cheats
+            if cheat.name == "Speed Boost" then
+                if character and character:FindFirstChildOfClass("Humanoid") then
+                    character:FindFirstChildOfClass("Humanoid").WalkSpeed = 16
+                end
+            elseif cheat.name == "Night Vision" then
+                game.Lighting.Brightness = 2
             end
         end
-        wait(0.5)
+    end)
+end
+
+-- Make UI draggable for mobile/desktop
+local dragging, dragInput, dragStart, startPos
+main.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
 
-spawn(function()
-    while true do
-        for _, tree in ipairs(workspace:GetChildren()) do
-            if tree:IsA("Model") and tree.Name:find("Tree") then
-                if autoFarmWoodType == "All" or tree.Name:find(autoFarmWoodType) then
-                    if tree:FindFirstChild("Health") then
-                        tree.Health.Value = 0
-                    end
-                end
-            end
-        end
-        wait(1)
+main.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
 end)
