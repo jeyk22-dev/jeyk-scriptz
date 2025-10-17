@@ -1,0 +1,78 @@
+--// Walk Speed Adjuster GUI (Custom Input Version)
+--// Compatible with Delta Executor, Fluxus, Synapse, etc.
+
+-- Remove old GUI if re-executed
+if game.CoreGui:FindFirstChild("WalkSpeedAdjuster") then
+    game.CoreGui.WalkSpeedAdjuster:Destroy()
+end
+
+-- Create ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "WalkSpeedAdjuster"
+ScreenGui.Parent = game.CoreGui
+
+-- Create Main Frame
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0, 200, 0, 100)
+Frame.Position = UDim2.new(0.5, -100, 0.8, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+
+-- Create Title Label
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+Title.BorderSizePixel = 0
+Title.Text = "Walk Speed Adjuster"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 18
+Title.Parent = Frame
+
+-- Create TextBox for speed input
+local SpeedBox = Instance.new("TextBox")
+SpeedBox.Size = UDim2.new(0, 180, 0, 30)
+SpeedBox.Position = UDim2.new(0, 10, 0, 40)
+SpeedBox.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+SpeedBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedBox.PlaceholderText = "Enter speed (e.g. 32)"
+SpeedBox.Font = Enum.Font.SourceSans
+SpeedBox.TextSize = 18
+SpeedBox.Parent = Frame
+
+-- Create Apply Button
+local Button = Instance.new("TextButton")
+Button.Size = UDim2.new(0, 180, 0, 25)
+Button.Position = UDim2.new(0, 10, 0, 75)
+Button.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button.Text = "Apply Speed"
+Button.Font = Enum.Font.SourceSansBold
+Button.TextSize = 18
+Button.Parent = Frame
+
+-- Main Logic
+local Player = game.Players.LocalPlayer
+
+Button.MouseButton1Click:Connect(function()
+	local Character = Player.Character or Player.CharacterAdded:Wait()
+	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+	if Humanoid then
+		local inputSpeed = tonumber(SpeedBox.Text)
+		if inputSpeed and inputSpeed > 0 then
+			Humanoid.WalkSpeed = inputSpeed
+			Button.Text = "Speed Set: " .. inputSpeed
+			Button.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+			task.wait(0.5)
+			Button.BackgroundColor3 = Color3.fromRGB(90, 90, 90)
+			Button.Text = "Apply Speed"
+		else
+			Button.Text = "Invalid Input!"
+			task.wait(1)
+			Button.Text = "Apply Speed"
+		end
+	end
+end)
